@@ -135,7 +135,7 @@ function addon:CreateGUI()
 
     -- Results ScrollFrame
     local sf = CreateFrame("ScrollFrame", "TradeUnionResultsScrollFrame", f, "UIPanelScrollFrameTemplate")
-    sf:SetPoint("BOTTOM", eb, "TOP", 0, 10)
+    sf:SetPoint("BOTTOM", eb, "TOP", 0, 5)
     sf:SetSize(285, 100)
     f.ScrollFrame = sf
 
@@ -167,10 +167,10 @@ function addon:NavigateList(key)
     local parent = addon.MainFrame.ScrollFrame
     local height = SEARCH_RESULT_HEIGHT
     local offset = (addon.selectedIndex - 1) * height
-    
+
     local currentScroll = parent:GetVerticalScroll()
     local viewHeight = parent:GetHeight()
-    
+
     if offset < currentScroll then
         parent:SetVerticalScroll(offset)
     elseif (offset + height) > (currentScroll + viewHeight) then
@@ -180,10 +180,10 @@ end
 
 local function HighlightText(text, searchTerms)
     if not searchTerms or #searchTerms == 0 then return text end
-    
+
     local lowerText = string.lower(text)
     local ranges = {}
-    
+
     for _, term in ipairs(searchTerms) do
         local startIdx = 1
         while true do
@@ -193,14 +193,14 @@ local function HighlightText(text, searchTerms)
             startIdx = e + 1
         end
     end
-    
+
     if #ranges == 0 then return text end
-    
+
     table.sort(ranges, function(a, b) return a[1] < b[1] end)
-    
+
     local merged = {}
     local current = ranges[1]
-    
+
     for i = 2, #ranges do
         local nextRange = ranges[i]
         if nextRange[1] <= current[2] + 1 then
@@ -211,7 +211,7 @@ local function HighlightText(text, searchTerms)
         end
     end
     table.insert(merged, current)
-    
+
     local res = ""
     local lastPos = 1
     for _, r in ipairs(merged) do
@@ -220,7 +220,7 @@ local function HighlightText(text, searchTerms)
         lastPos = r[2] + 1
     end
     res = res .. string.sub(text, lastPos)
-    
+
     return res
 end
 
@@ -228,25 +228,25 @@ local function CalculateScore(text, searchTerms)
     local score = 0
     local lowerText = string.lower(text)
     local totalMatchLength = 0
-    
+
     for _, term in ipairs(searchTerms) do
         local startIdx = string.find(lowerText, term, 1, true)
         if not startIdx then return -1 end
-        
+
         totalMatchLength = totalMatchLength + #term
         if startIdx == 1 then score = score + 50 end
     end
-    
+
     score = score + 100
     score = score - (#text - totalMatchLength)
-    
+
     return score
 end
 
 function addon:UpdateSearch(text)
     local results = {}
     text = string.lower(text)
-    
+
     local searchTerms = {}
     for word in text:gmatch("%S+") do
         table.insert(searchTerms, word)
@@ -261,11 +261,11 @@ function addon:UpdateSearch(text)
             end
         end
 
-        table.sort(results, function(a, b) 
+        table.sort(results, function(a, b)
             if a.score ~= b.score then
                 return a.score > b.score
             end
-            return a.eng < b.eng 
+            return a.eng < b.eng
         end)
     end
 
@@ -313,7 +313,7 @@ function addon:DisplayResults(results, searchTerms)
     f.Results:SetHeight(listHeight)
 
     local visibleCount = math.min(numResults, MAX_RESULTS)
-    
+
     local visibleHeight = visibleCount * SEARCH_RESULT_HEIGHT
     f.ScrollFrame:SetHeight(visibleHeight)
 
@@ -327,6 +327,9 @@ function addon:DisplayResults(results, searchTerms)
     end
 
     local newHeight = visibleHeight + 80
+    if visibleCount == 0 then
+        newHeight = 75
+    end
     f:SetHeight(newHeight)
 
     addon:UpdateHighlight()

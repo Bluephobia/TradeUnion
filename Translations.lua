@@ -3,7 +3,7 @@ local addonName, addon = ...
 addon.Translations = {
     -- General
     ["Hello"] = "你好",
-    ["Thank you"] = "谢谢",
+    ["Thanks"] = "谢谢",
     ["Yes"] = "是",
     ["No"] = "不",
     ["Bye"] = "再见",
@@ -31,6 +31,7 @@ addon.Translations = {
     ["Ready"] = "开",
     ["Go"] = "走",
     ["Wait"] = "等",
+    ["Come here"] = "过来",
     ["Pull more"] = "多拉点",
     ["Summon please"] = "请拉我",
     ["OOM (No Mana)"] = "没蓝了",

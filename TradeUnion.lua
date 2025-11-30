@@ -69,10 +69,23 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if not TradeUnionDB then
             TradeUnionDB = {}
         end
+        if not TradeUnionDB.translations then
+            TradeUnionDB.translations = {}
+        end
+
+        -- Merge defaults
+        if addon.Translations then
+            for k, v in pairs(addon.Translations) do
+                if not TradeUnionDB.translations[k] then
+                    TradeUnionDB.translations[k] = v
+                end
+            end
+        end
+
         self:UnregisterEvent("ADDON_LOADED")
     elseif event == "PLAYER_LOGIN" then
-        print("|cff00ff00TradeUnion|r loaded. Type /tu to open.")
-        
+        print("|cff00ff00TradeUnion|r loaded. Type /tu to list commands.")
+
         if not GetBindingKey("TRADEUNION_OPEN") then
             print("|cff00ff00TradeUnion|r: No hotkey bound. Please set a keybinding in the Key Bindings menu under 'Trade Union'.")
         end
@@ -150,7 +163,8 @@ function addon:UpdateSearch(text)
     text = string.lower(text)
 
     if text ~= "" then
-        for eng, cn in pairs(addon.Translations) do
+        local source = TradeUnionDB.translations or addon.Translations
+        for eng, cn in pairs(source) do
             if string.find(string.lower(eng), text, 1, true) then
                 table.insert(results, {eng = eng, cn = cn})
             end
@@ -283,9 +297,201 @@ function addon:ToggleSearch()
     end
 end
 
+function addon:ExportTranslations()
+    local export = "addon.Translations = {\n"
+    local keys = {}
+    local source = TradeUnionDB.translations or addon.Translations
+    for k in pairs(source) do table.insert(keys, k) end
+    table.sort(keys)
+
+    for _, k in ipairs(keys) do
+        export = export .. string.format('    ["%s"] = "%s",\n', k, source[k])
+    end
+    export = export .. "}"
+    addon:ShowExportWindow(export)
+end
+
+function addon:ShowExportWindow(text)
+    if not addon.ExportFrame then
+        local f = CreateFrame("Frame", "TradeUnionExportFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        f:SetSize(500, 400)
+        f:SetPoint("CENTER")
+        f:SetFrameStrata("DIALOG")
+        f:EnableMouse(true)
+
+        f:SetBackdrop({
+            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 32, edgeSize = 32,
+            insets = { left = 11, right = 12, top = 12, bottom = 11 }
+        })
+
+        local sf = CreateFrame("ScrollFrame", "TradeUnionExportScroll", f, "UIPanelScrollFrameTemplate")
+        sf:SetPoint("TOPLEFT", 20, -20)
+        sf:SetPoint("BOTTOMRIGHT", -40, 20)
+
+        local eb = CreateFrame("EditBox", nil, sf)
+        eb:SetMultiLine(true)
+        eb:SetFontObject(ChatFontNormal)
+        eb:SetWidth(440)
+        sf:SetScrollChild(eb)
+
+        eb:SetScript("OnEscapePressed", function() f:Hide() end)
+
+        f.EditBox = eb
+        f.ScrollFrame = sf
+
+        local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
+
+        addon.ExportFrame = f
+    end
+
+    addon.ExportFrame:Show()
+    addon.ExportFrame.EditBox:SetText(text)
+    addon.ExportFrame.EditBox:HighlightText()
+    addon.ExportFrame.EditBox:SetFocus()
+end
+
+function addon:ShowImportWindow()
+    if not addon.ImportFrame then
+        local f = CreateFrame("Frame", "TradeUnionImportFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        f:SetSize(500, 400)
+        f:SetPoint("CENTER")
+        f:SetFrameStrata("DIALOG")
+        f:EnableMouse(true)
+
+        f:SetBackdrop({
+            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 32, edgeSize = 32,
+            insets = { left = 11, right = 12, top = 12, bottom = 11 }
+        })
+
+        local sf = CreateFrame("ScrollFrame", "TradeUnionImportScroll", f, "UIPanelScrollFrameTemplate")
+        sf:SetPoint("TOPLEFT", 20, -20)
+        sf:SetPoint("BOTTOMRIGHT", -40, 50)
+
+        local eb = CreateFrame("EditBox", nil, sf)
+        eb:SetMultiLine(true)
+        eb:SetFontObject(ChatFontNormal)
+        eb:SetWidth(440)
+        sf:SetScrollChild(eb)
+
+        eb:SetScript("OnEscapePressed", function() f:Hide() end)
+
+        f.EditBox = eb
+
+        local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
+
+        local importBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        importBtn:SetSize(100, 30)
+        importBtn:SetPoint("BOTTOM", f, "BOTTOM", 0, 15)
+        importBtn:SetText("Import")
+        importBtn:SetScript("OnClick", function()
+            addon:ProcessImport(f.EditBox:GetText())
+            f:Hide()
+        end)
+
+        addon.ImportFrame = f
+    end
+
+    addon.ImportFrame:Show()
+    addon.ImportFrame.EditBox:SetText("")
+    addon.ImportFrame.EditBox:SetFocus()
+end
+
+function addon:ProcessImport(text)
+    local count = 0
+    for eng, cn in text:gmatch('%["(.-)"%]%s*=%s*"(.-)"') do
+        if eng and cn then
+            if not TradeUnionDB.translations then TradeUnionDB.translations = {} end
+            TradeUnionDB.translations[eng] = cn
+            count = count + 1
+        end
+    end
+
+    if count > 0 then
+        print("|cff00ff00TradeUnion|r: Successfully imported " .. count .. " translations.")
+    else
+        print("|cff00ff00TradeUnion|r: No valid translations found. Ensure format is: [\"English\"] = \"Chinese\",")
+    end
+end
+
+local function FindKeyCI(tbl, key)
+    if not tbl then return nil end
+    if tbl[key] then return key end
+    key = string.lower(key)
+    for k in pairs(tbl) do
+        if string.lower(k) == key then
+            return k
+        end
+    end
+    return nil
+end
+
 -- Slash Command
 SLASH_TRADEUNION1 = "/tu"
 SLASH_TRADEUNION2 = "/tradeunion"
 SlashCmdList["TRADEUNION"] = function(msg)
-    addon:ToggleSearch()
+    local cmd, rest = msg:match("^(%S*)%s*(.-)$")
+    cmd = string.lower(cmd)
+    if cmd == "add" then
+        local eng, cn
+
+        -- Check if starts with quote
+        if rest:sub(1,1) == '"' then
+            -- Match quoted string followed by space and rest
+            eng, cn = rest:match('^"(.-)"%s+(.+)$')
+        else
+            -- Match first word followed by space and rest
+            eng, cn = rest:match("^(%S+)%s+(.+)$")
+        end
+
+        -- If cn is found, check if it is fully quoted and strip
+        if cn then
+            local quoted_cn = cn:match('^"(.-)"$')
+            if quoted_cn then cn = quoted_cn end
+        end
+
+        if eng and cn then
+            if not TradeUnionDB.translations then TradeUnionDB.translations = {} end
+            local key = FindKeyCI(TradeUnionDB.translations, eng) or eng
+            TradeUnionDB.translations[key] = cn
+            print("|cff00ff00TradeUnion|r: Added translation: " .. key .. " -> " .. cn)
+        else
+            print("|cff00ff00TradeUnion|r: Usage: /tu add {english} {chinese}")
+        end
+    elseif cmd == "remove" then
+        local eng = rest
+        -- Strip quotes if present
+        local quoted = eng:match('^"(.-)"$')
+        if quoted then eng = quoted end
+
+        if eng and eng ~= "" then
+            local key = FindKeyCI(TradeUnionDB.translations, eng)
+            if key then
+                TradeUnionDB.translations[key] = nil
+                print("|cff00ff00TradeUnion|r: Removed translation: " .. key)
+            else
+                print("|cff00ff00TradeUnion|r: Translation not found: " .. eng)
+            end
+        else
+            print("|cff00ff00TradeUnion|r: Usage: /tu remove {english}")
+        end
+    elseif cmd == "export" then
+        addon:ExportTranslations()
+    elseif cmd == "import" then
+        addon:ShowImportWindow()
+    elseif cmd == "open" then
+        addon:ToggleSearch()
+    else
+        print("|cff00ff00TradeUnion|r Commands:")
+        print("  /tu open - Open search window. Prefer setting a keybinding.")
+        print("  /tu add English 英语 - Add translation")
+        print("  /tu remove English - Add translation for \"English\"")
+        print("  /tu export - Export translations")
+        print("  /tu import - Import translations")
+    end
 end

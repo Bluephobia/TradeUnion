@@ -247,11 +247,6 @@ function addon:PasteText(text)
             editBox:Show()
         end
         editBox:SetFocus()
-
-        local currentText = editBox:GetText()
-        if currentText and currentText ~= "" and string.sub(currentText, -1) ~= " " then
-            text = " " .. text
-        end
         editBox:Insert(text)
     else
         ChatFrame_OpenChat(text)

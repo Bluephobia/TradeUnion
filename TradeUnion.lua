@@ -96,11 +96,11 @@ end)
 
 -- UI Constants
 local SEARCH_RESULT_HEIGHT = 20
-local MAX_RESULTS = 15
+local MAX_RESULTS = 6
 
 function addon:CreateGUI()
     local f = CreateFrame("Frame", "TradeUnionFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-    f:SetSize(300, 400)
+    f:SetSize(320, 400)
     f:SetPoint("BOTTOMLEFT", ChatFrame1, "TOPLEFT", 0, 20)
     f:Hide()
 
@@ -133,10 +133,16 @@ function addon:CreateGUI()
     end)
     f.SearchBox = eb
 
+    -- Results ScrollFrame
+    local sf = CreateFrame("ScrollFrame", "TradeUnionResultsScrollFrame", f, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("BOTTOM", eb, "TOP", 0, 10)
+    sf:SetSize(285, 100)
+    f.ScrollFrame = sf
+
     -- Results Container
-    local results = CreateFrame("Frame", nil, f)
-    results:SetWidth(260)
-    results:SetPoint("BOTTOM", eb, "TOP", 0, 10)
+    local results = CreateFrame("Frame", nil, sf)
+    results:SetSize(260, 1)
+    sf:SetScrollChild(results)
     f.Results = results
 
     f.ResultButtons = {}
@@ -156,29 +162,119 @@ function addon:NavigateList(key)
     end
 
     addon:UpdateHighlight()
+
+    -- Scroll to selection
+    local parent = addon.MainFrame.ScrollFrame
+    local height = SEARCH_RESULT_HEIGHT
+    local offset = (addon.selectedIndex - 1) * height
+    
+    local currentScroll = parent:GetVerticalScroll()
+    local viewHeight = parent:GetHeight()
+    
+    if offset < currentScroll then
+        parent:SetVerticalScroll(offset)
+    elseif (offset + height) > (currentScroll + viewHeight) then
+        parent:SetVerticalScroll(offset + height - viewHeight)
+    end
+end
+
+local function HighlightText(text, searchTerms)
+    if not searchTerms or #searchTerms == 0 then return text end
+    
+    local lowerText = string.lower(text)
+    local ranges = {}
+    
+    for _, term in ipairs(searchTerms) do
+        local startIdx = 1
+        while true do
+            local s, e = string.find(lowerText, term, startIdx, true)
+            if not s then break end
+            table.insert(ranges, {s, e})
+            startIdx = e + 1
+        end
+    end
+    
+    if #ranges == 0 then return text end
+    
+    table.sort(ranges, function(a, b) return a[1] < b[1] end)
+    
+    local merged = {}
+    local current = ranges[1]
+    
+    for i = 2, #ranges do
+        local nextRange = ranges[i]
+        if nextRange[1] <= current[2] + 1 then
+            current[2] = math.max(current[2], nextRange[2])
+        else
+            table.insert(merged, current)
+            current = nextRange
+        end
+    end
+    table.insert(merged, current)
+    
+    local res = ""
+    local lastPos = 1
+    for _, r in ipairs(merged) do
+        res = res .. string.sub(text, lastPos, r[1] - 1)
+        res = res .. "|cff00ff00" .. string.sub(text, r[1], r[2]) .. "|r"
+        lastPos = r[2] + 1
+    end
+    res = res .. string.sub(text, lastPos)
+    
+    return res
+end
+
+local function CalculateScore(text, searchTerms)
+    local score = 0
+    local lowerText = string.lower(text)
+    local totalMatchLength = 0
+    
+    for _, term in ipairs(searchTerms) do
+        local startIdx = string.find(lowerText, term, 1, true)
+        if not startIdx then return -1 end
+        
+        totalMatchLength = totalMatchLength + #term
+        if startIdx == 1 then score = score + 50 end
+    end
+    
+    score = score + 100
+    score = score - (#text - totalMatchLength)
+    
+    return score
 end
 
 function addon:UpdateSearch(text)
     local results = {}
     text = string.lower(text)
+    
+    local searchTerms = {}
+    for word in text:gmatch("%S+") do
+        table.insert(searchTerms, word)
+    end
 
-    if text ~= "" then
+    if #searchTerms > 0 then
         local source = TradeUnionDB.translations or addon.Translations
         for eng, cn in pairs(source) do
-            if string.find(string.lower(eng), text, 1, true) then
-                table.insert(results, {eng = eng, cn = cn})
+            local score = CalculateScore(eng, searchTerms)
+            if score > -1 then
+                table.insert(results, {eng = eng, cn = cn, score = score})
             end
         end
 
-        table.sort(results, function(a, b) return a.eng < b.eng end)
+        table.sort(results, function(a, b) 
+            if a.score ~= b.score then
+                return a.score > b.score
+            end
+            return a.eng < b.eng 
+        end)
     end
 
     addon.currentResults = results
     addon.selectedIndex = 1
-    addon:DisplayResults(results)
+    addon:DisplayResults(results, searchTerms)
 end
 
-function addon:DisplayResults(results)
+function addon:DisplayResults(results, searchTerms)
     local f = addon.MainFrame
 
     -- Hide all existing buttons
@@ -187,8 +283,6 @@ function addon:DisplayResults(results)
     end
 
     for i, data in ipairs(results) do
-        if i > MAX_RESULTS then break end
-
         local btn = f.ResultButtons[i]
         if not btn then
             btn = CreateFrame("Button", nil, f.Results)
@@ -208,19 +302,31 @@ function addon:DisplayResults(results)
             f.ResultButtons[i] = btn
         end
 
-        btn.Text:SetText(data.eng .. " - " .. data.cn)
+        local displayEng = HighlightText(data.eng, searchTerms)
+        btn.Text:SetText(displayEng .. " - " .. data.cn)
         btn:Show()
     end
 
     -- Adjust frame height based on results
-    local numResults = math.min(#results, MAX_RESULTS)
+    local numResults = #results
     local listHeight = numResults * SEARCH_RESULT_HEIGHT
     f.Results:SetHeight(listHeight)
 
-    local newHeight = listHeight + 80
-    if numResults == 0 then
-        newHeight = 70
+    local visibleCount = math.min(numResults, MAX_RESULTS)
+    
+    local visibleHeight = visibleCount * SEARCH_RESULT_HEIGHT
+    f.ScrollFrame:SetHeight(visibleHeight)
+
+    local scrollBar = _G["TradeUnionResultsScrollFrameScrollBar"]
+    if scrollBar then
+        if numResults > MAX_RESULTS then
+            scrollBar:Show()
+        else
+            scrollBar:Hide()
+        end
     end
+
+    local newHeight = visibleHeight + 80
     f:SetHeight(newHeight)
 
     addon:UpdateHighlight()

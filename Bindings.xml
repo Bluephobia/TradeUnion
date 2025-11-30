@@ -1,0 +1,5 @@
+<Bindings>
+	<Binding name="TRADEUNION_OPEN" category="Trade Union">
+		TradeUnion:ToggleSearch()
+	</Binding>
+</Bindings>

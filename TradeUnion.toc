@@ -1,0 +1,10 @@
+## Interface: 11506
+## Title: TradeUnion
+## Notes: Pastes English to Chinese phrase translations into chat.
+## Author: Bluephobia
+## Version: 1.0.0
+## SavedVariables: TradeUnionDB
+
+Translations.lua
+TradeUnion.lua
+Bindings.xml

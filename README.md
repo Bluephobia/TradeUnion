@@ -1,6 +1,8 @@
-# TradeUnion
+# Trade Union
 
 A simple World of Warcraft addon that can paste English to Chinese translations into chat. Designed to help Western players communicate on Titan Reforged servers.
+
+![WowClassic_83cCsFf0jW](https://github.com/user-attachments/assets/424d0fbb-6d14-4319-ac69-189c1466c43f)
 
 ## Features
 

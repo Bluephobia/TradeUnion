@@ -7,11 +7,11 @@ A simple World of Warcraft addon that can paste English to Chinese translations 
 ## Features
 
 *   **Quick Translation**: Search for common phrases in English and see their Simplified Chinese translations.
+    *   **Note: A keybinding is required to open the search window.**
 *   **Keyboard Navigation**: Use Up/Down arrows to navigate results and Enter to paste.
 *   **Smart Pasting**:
     *   Pastes directly into your active chat window.
     *   Preserves existing text in the chat box.
-*   **Keybinding Support**: Bind a hotkey to open the search window instantly (even while typing).
 
 ## How to Use
 
@@ -21,10 +21,10 @@ A simple World of Warcraft addon that can paste English to Chinese translations 
     *   Scroll down to the **Trade Union** category.
     *   Bind a key to **Open**.
 3.  **Search & Paste**:
-    *   Press your bound hotkey.
-    *   Type an English phrase (e.g., "invite", "tank", "wts").
+    *   While typing in chat, press your bound hotkey.
+    *   Continue typing to refine translation search results.
     *   Use **Up/Down** arrows to highlight the desired translation.
-    *   Press **Enter** (or click) to paste the Chinese translation into your chat.
+    *   Press **Enter** (or click) to paste the translation into your chat.
 
 ## Adding More Translations
 
@@ -68,7 +68,6 @@ This system allows the community to build and share translation lists easily.
 ## Slash Commands
 
 *   `/tu`: Lists available commands.
-*   `/tu open`: Opens the search window. Prefer setting a keybinding over using this command.
 *   `/tu add {en} {cn}`: Adds a new translation.
     *   Example: `/tu add English 英语`
     *   Enclose multiple words in quotes: `/tu add "English Speaker" "英语演讲者"`

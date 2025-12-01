@@ -722,11 +722,9 @@ SlashCmdList["TRADEUNION"] = function(msg)
         addon:ShowImportWindow()
     elseif cmd == "reset" then
         StaticPopup_Show("TRADEUNION_RESET_CONFIRM")
-    elseif cmd == "open" then
-        addon:ToggleSearch()
     else
         print("|cff00ff00TradeUnion|r Commands:")
-        print("  /tu open - Open search window. Prefer setting a keybinding.")
+        print("  (Keybinding required to open search window)")
         print("  /tu add English 英语 - Add translation")
         print("  /tu remove English - Add translation for \"English\"")
         print("  /tu export - Export translations")

@@ -333,6 +333,7 @@ end
 function addon:UpdateSearch(text)
     local results = {}
     text = string.lower(text)
+    local isChineseSearch = string.find(text, "[\128-\255]")
 
     local searchTerms = {}
     for word in text:gmatch("%S+") do
@@ -341,10 +342,15 @@ function addon:UpdateSearch(text)
 
     if #searchTerms > 0 then
         local source = TradeUnionDB.translations or addon.Translations
-        for eng, cn in pairs(source) do
-            local score = CalculateScore(eng, searchTerms)
+        for k, v in pairs(source) do
+            local src, tgt = k, v
+            if isChineseSearch then
+                src, tgt = v, k
+            end
+
+            local score = CalculateScore(src, searchTerms)
             if score > -1 then
-                table.insert(results, {eng = eng, cn = cn, score = score})
+                table.insert(results, {source = src, target = tgt, score = score})
             end
         end
 
@@ -352,7 +358,7 @@ function addon:UpdateSearch(text)
             if a.score ~= b.score then
                 return a.score < b.score
             end
-            return a.eng > b.eng
+            return a.source > b.source
         end)
     end
 
@@ -400,15 +406,15 @@ function addon:DisplayResults(results, searchTerms)
 
             btn:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 
-            btn:SetScript("OnClick", function()
-                addon:PasteText(data.cn)
-            end)
-
             f.ResultButtons[i] = btn
         end
 
-        local displayEng = HighlightText(data.eng, searchTerms)
-        btn.Text:SetText(displayEng .. " - " .. data.cn)
+        btn:SetScript("OnClick", function()
+            addon:PasteText(data.target)
+        end)
+
+        local displaySource = HighlightText(data.source, searchTerms)
+        btn.Text:SetText(displaySource .. " - " .. data.target)
         btn:Show()
     end
 
@@ -441,7 +447,7 @@ end
 
 function addon:SelectCurrentResult()
     if addon.currentResults and addon.selectedIndex and addon.currentResults[addon.selectedIndex] then
-        addon:PasteText(addon.currentResults[addon.selectedIndex].cn)
+        addon:PasteText(addon.currentResults[addon.selectedIndex].target)
     end
 end
 
@@ -464,7 +470,9 @@ function addon:PasteText(text)
         local startIdx = addon.searchStartIndex or 1
 
         local prefix = string.sub(currentText, 1, startIdx - 1)
-        prefix = string.gsub(prefix, "%s+$", "")
+        if string.find(text, "[\128-\255]") then
+            prefix = string.gsub(prefix, "%s+$", "")
+        end
         local suffix = string.sub(currentText, cursor + 1)
         local newText = prefix .. text .. suffix
 

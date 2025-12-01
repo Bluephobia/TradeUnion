@@ -74,3 +74,4 @@ This system allows the community to build and share translation lists easily.
     *   Example: `/tu remove English`
 *   `/tu export`: Opens a window with all translations in a copy-able format.
 *   `/tu import`: Opens a window to paste and import translations (Lua table format).
+*   `/tu reset`: Resets all translations to the default list (requires confirmation).

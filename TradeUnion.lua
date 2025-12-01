@@ -4,6 +4,25 @@ TradeUnion = addon
 -- Binding Strings
 _G.BINDING_NAME_TRADEUNION_OPEN = "Open"
 
+StaticPopupDialogs["TRADEUNION_RESET_CONFIRM"] = {
+    text = "Are you sure you want to reset all translations to default? This cannot be undone.",
+    button1 = "Yes",
+    button2 = "No",
+    OnAccept = function()
+        TradeUnionDB.translations = {}
+        if addon.Translations then
+            for k, v in pairs(addon.Translations) do
+                TradeUnionDB.translations[k] = v
+            end
+        end
+        print("|cff00ff00TradeUnion|r: Translations reset to default.")
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
 local function IsKeyMatch(pressedKey, binding)
     if not binding then return false end
 
@@ -29,19 +48,37 @@ local function IsKeyMatch(pressedKey, binding)
     return true
 end
 
+local function CreateKeyChord(key)
+    if key:find("SHIFT") or key:find("CTRL") or key:find("ALT") then
+        return nil
+    end
+
+    local chord = ""
+    if IsAltKeyDown() then chord = chord .. "ALT-" end
+    if IsControlKeyDown() then chord = chord .. "CTRL-" end
+    if IsShiftKeyDown() then chord = chord .. "SHIFT-" end
+    chord = chord .. key
+    return chord
+end
+
 local function InitHooks()
     for i = 1, NUM_CHAT_WINDOWS do
         local editBox = _G["ChatFrame"..i.."EditBox"]
         if editBox then
             local oldOnKeyDown = editBox:GetScript("OnKeyDown")
             editBox:SetScript("OnKeyDown", function(self, key)
-                addon.suppressNextChar = false
+                self.suppressNextChar = false
+                self.restoreText = false
 
                 local b1, b2 = GetBindingKey("TRADEUNION_OPEN")
-                if (b1 and IsKeyMatch(key, b1)) or (b2 and IsKeyMatch(key, b2)) then
+                local chord = CreateKeyChord(key)
+                local action = chord and GetBindingAction(chord)
+
+                if (b1 and IsKeyMatch(key, b1)) or (b2 and IsKeyMatch(key, b2)) or (action == "TRADEUNION_OPEN") then
                     addon:ToggleSearch()
-                    addon.suppressNextChar = true
-                    self:ClearFocus()
+                    self.suppressNextChar = true
+                    self.preSuppressText = self:GetText()
+                    self.preSuppressCursor = self:GetCursorPosition()
                     return
                 end
 
@@ -50,11 +87,73 @@ local function InitHooks()
 
             local oldOnChar = editBox:GetScript("OnChar")
             editBox:SetScript("OnChar", function(self, text)
-                if addon.suppressNextChar then
-                    addon.suppressNextChar = false
+                if self.suppressNextChar then
+                    self.suppressNextChar = false
+                    self.restoreText = true
                     return
                 end
                 if oldOnChar then oldOnChar(self, text) end
+            end)
+
+            local oldOnTextChanged = editBox:GetScript("OnTextChanged")
+            editBox:SetScript("OnTextChanged", function(self, userInput)
+                if self.restoreText then
+                    self.restoreText = false
+                    self:SetText(self.preSuppressText)
+                    self:SetCursorPosition(self.preSuppressCursor)
+                    return
+                end
+
+                if addon.MainFrame and addon.MainFrame:IsShown() then
+                    local text = self:GetText()
+                    local cursor = self:GetCursorPosition()
+
+                    if userInput and addon.searchStartIndex and cursor < addon.searchStartIndex then
+                        addon.MainFrame:Hide()
+                    else
+                        local start = addon.searchStartIndex or 1
+                        local query = string.sub(text, start, cursor)
+                        addon:UpdateSearch(query)
+                    end
+                end
+                if oldOnTextChanged then oldOnTextChanged(self, userInput) end
+            end)
+
+            local oldOnArrowPressed = editBox:GetScript("OnArrowPressed")
+            editBox:SetScript("OnArrowPressed", function(self, key)
+                if addon.MainFrame and addon.MainFrame:IsShown() then
+                    if key == "UP" or key == "DOWN" then
+                        addon:NavigateList(key)
+                        return
+                    end
+                end
+                if oldOnArrowPressed then oldOnArrowPressed(self, key) end
+            end)
+
+            local oldOnEnterPressed = editBox:GetScript("OnEnterPressed")
+            editBox:SetScript("OnEnterPressed", function(self)
+                if addon.MainFrame and addon.MainFrame:IsShown() and addon.currentResults and #addon.currentResults > 0 then
+                    addon:SelectCurrentResult()
+                    return
+                end
+                if oldOnEnterPressed then oldOnEnterPressed(self) end
+            end)
+
+            local oldOnEscapePressed = editBox:GetScript("OnEscapePressed")
+            editBox:SetScript("OnEscapePressed", function(self)
+                if addon.MainFrame and addon.MainFrame:IsShown() and addon.currentResults and #addon.currentResults > 0 then
+                    addon.MainFrame:Hide()
+                    return
+                end
+                if oldOnEscapePressed then oldOnEscapePressed(self) end
+            end)
+
+            local oldOnEditFocusLost = editBox:GetScript("OnEditFocusLost")
+            editBox:SetScript("OnEditFocusLost", function(self)
+                if addon.MainFrame and addon.MainFrame:IsShown() and not addon.MainFrame:IsMouseOver() then
+                    addon.MainFrame:Hide()
+                end
+                if oldOnEditFocusLost then oldOnEditFocusLost(self) end
             end)
         end
     end
@@ -112,31 +211,11 @@ function addon:CreateGUI()
         insets = { left = 11, right = 12, top = 12, bottom = 11 }
     })
 
-    -- Search Box
-    local eb = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-    eb:SetSize(260, 30)
-    eb:SetPoint("BOTTOM", f, "BOTTOM", 0, 20)
-    eb:SetAutoFocus(true)
-    eb:SetScript("OnEscapePressed", function()
-        f:Hide()
-        self:SetText("")
-        addon:UpdateSearch("")
-    end)
-    eb:SetScript("OnTextChanged", function(self)
-        addon:UpdateSearch(self:GetText())
-    end)
-    eb:SetScript("OnArrowPressed", function(self, key)
-        addon:NavigateList(key)
-    end)
-    eb:SetScript("OnEnterPressed", function()
-        addon:SelectCurrentResult()
-    end)
-    f.SearchBox = eb
-
     -- Results ScrollFrame
     local sf = CreateFrame("ScrollFrame", "TradeUnionResultsScrollFrame", f, "UIPanelScrollFrameTemplate")
-    sf:SetPoint("BOTTOM", eb, "TOP", 0, 5)
-    sf:SetSize(285, 100)
+    sf:SetPoint("BOTTOM", f, "BOTTOM", 0, 10)
+    sf:SetPoint("TOP", f, "TOP", 0, -10)
+    sf:SetWidth(285)
     f.ScrollFrame = sf
 
     -- Results Container
@@ -144,8 +223,14 @@ function addon:CreateGUI()
     results:SetSize(260, 1)
     sf:SetScrollChild(results)
     f.Results = results
-
     f.ResultButtons = {}
+
+    local noRes = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    noRes:SetPoint("CENTER", f, "CENTER", 0, 0)
+    noRes:SetWidth(240)
+    noRes:SetJustifyH("CENTER")
+    noRes:Hide()
+    f.NoResultsText = noRes
 
     addon.MainFrame = f
 end
@@ -154,11 +239,13 @@ function addon:NavigateList(key)
     if not addon.currentResults or #addon.currentResults == 0 then return end
 
     if key == "UP" then
-        addon.selectedIndex = addon.selectedIndex - 1
-        if addon.selectedIndex < 1 then addon.selectedIndex = #addon.currentResults end
+        if addon.selectedIndex > 1 then
+            addon.selectedIndex = addon.selectedIndex - 1
+        end
     elseif key == "DOWN" then
-        addon.selectedIndex = addon.selectedIndex + 1
-        if addon.selectedIndex > #addon.currentResults then addon.selectedIndex = 1 end
+        if addon.selectedIndex < #addon.currentResults then
+            addon.selectedIndex = addon.selectedIndex + 1
+        end
     end
 
     addon:UpdateHighlight()
@@ -263,14 +350,14 @@ function addon:UpdateSearch(text)
 
         table.sort(results, function(a, b)
             if a.score ~= b.score then
-                return a.score > b.score
+                return a.score < b.score
             end
-            return a.eng < b.eng
+            return a.eng > b.eng
         end)
     end
 
     addon.currentResults = results
-    addon.selectedIndex = 1
+    addon.selectedIndex = #results
     addon:DisplayResults(results, searchTerms)
 end
 
@@ -281,6 +368,24 @@ function addon:DisplayResults(results, searchTerms)
     for _, btn in ipairs(f.ResultButtons) do
         btn:Hide()
     end
+
+    local numResults = #results
+    if numResults == 0 then
+        f.ScrollFrame:Hide()
+        local term = table.concat(searchTerms, " ")
+        if term and term ~= "" then
+            f.NoResultsText:SetText("No translation found for " .. term)
+        else
+            f.NoResultsText:SetText("Start typing...")
+        end
+        f.NoResultsText:Show()
+        f:SetHeight(40)
+        addon:UpdateHighlight()
+        return
+    end
+
+    f.NoResultsText:Hide()
+    f.ScrollFrame:Show()
 
     for i, data in ipairs(results) do
         local btn = f.ResultButtons[i]
@@ -308,7 +413,6 @@ function addon:DisplayResults(results, searchTerms)
     end
 
     -- Adjust frame height based on results
-    local numResults = #results
     local listHeight = numResults * SEARCH_RESULT_HEIGHT
     f.Results:SetHeight(listHeight)
 
@@ -326,11 +430,11 @@ function addon:DisplayResults(results, searchTerms)
         end
     end
 
-    local newHeight = visibleHeight + 80
-    if visibleCount == 0 then
-        newHeight = 75
-    end
+    local newHeight = visibleHeight + 20
     f:SetHeight(newHeight)
+
+    local maxScroll = math.max(0, listHeight - visibleHeight)
+    f.ScrollFrame:SetVerticalScroll(maxScroll)
 
     addon:UpdateHighlight()
 end
@@ -343,8 +447,6 @@ end
 
 function addon:PasteText(text)
     addon.MainFrame:Hide()
-    addon.MainFrame.SearchBox:SetText("")
-    addon:UpdateSearch("")
 
     local editBox = addon.lastActiveChatBox
     if not editBox then
@@ -356,7 +458,18 @@ function addon:PasteText(text)
             editBox:Show()
         end
         editBox:SetFocus()
-        editBox:Insert(text)
+
+        local currentText = editBox:GetText()
+        local cursor = editBox:GetCursorPosition()
+        local startIdx = addon.searchStartIndex or 1
+
+        local prefix = string.sub(currentText, 1, startIdx - 1)
+        prefix = string.gsub(prefix, "%s+$", "")
+        local suffix = string.sub(currentText, cursor + 1)
+        local newText = prefix .. text .. suffix
+
+        editBox:SetText(newText)
+        editBox:SetCursorPosition(#prefix + #text)
     else
         ChatFrame_OpenChat(text)
     end
@@ -374,6 +487,17 @@ function addon:UpdateHighlight()
     end
 end
 
+function addon:GetSearchStart(text, cursor)
+    if cursor == 0 then return 1 end
+    local prefix = string.sub(text, 1, cursor)
+    local lastSpace = string.match(prefix, ".*()%s")
+    if lastSpace then
+        return lastSpace + 1
+    else
+        return 1
+    end
+end
+
 function addon:ToggleSearch()
     if not addon.MainFrame then
         addon:CreateGUI()
@@ -385,19 +509,19 @@ function addon:ToggleSearch()
         local editBox = ChatEdit_GetActiveWindow()
         if editBox and editBox:IsVisible() then
             addon.lastActiveChatBox = editBox
-        else
-            addon.lastActiveChatBox = nil
-        end
 
-        addon.MainFrame:Show()
-        addon.MainFrame.SearchBox:SetText("")
-        addon:UpdateSearch("")
-        C_Timer.After(0.05, function()
-            if addon.MainFrame:IsShown() then
-                addon.MainFrame.SearchBox:SetFocus()
-                addon.MainFrame.SearchBox:SetText("")
-            end
-        end)
+            local text = editBox:GetText()
+            local cursor = editBox:GetCursorPosition()
+            addon.searchStartIndex = addon:GetSearchStart(text, cursor)
+
+            addon.MainFrame:ClearAllPoints()
+            addon.MainFrame:SetPoint("BOTTOMLEFT", editBox, "TOPLEFT", 0, 0)
+
+            addon.MainFrame:Show()
+
+            local query = string.sub(text, addon.searchStartIndex, cursor)
+            addon:UpdateSearch(query)
+        end
     end
 end
 
@@ -588,6 +712,8 @@ SlashCmdList["TRADEUNION"] = function(msg)
         addon:ExportTranslations()
     elseif cmd == "import" then
         addon:ShowImportWindow()
+    elseif cmd == "reset" then
+        StaticPopup_Show("TRADEUNION_RESET_CONFIRM")
     elseif cmd == "open" then
         addon:ToggleSearch()
     else
@@ -597,5 +723,6 @@ SlashCmdList["TRADEUNION"] = function(msg)
         print("  /tu remove English - Add translation for \"English\"")
         print("  /tu export - Export translations")
         print("  /tu import - Import translations")
+        print("  /tu reset - Reset translations to default")
     end
 end

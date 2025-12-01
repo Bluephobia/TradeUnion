@@ -1,4 +1,4 @@
-## Interface: 110205
+## Interface: 40401
 ## Title: TradeUnion
 ## Notes: Pastes English to Chinese phrase translations into chat.
 ## Author: Bluephobia

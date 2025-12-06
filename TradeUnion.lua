@@ -515,6 +515,11 @@ function addon:ToggleSearch()
         addon.MainFrame:Hide()
     else
         local editBox = ChatEdit_GetActiveWindow()
+        if not editBox or not editBox:IsVisible() then
+            ChatFrame_OpenChat("")
+            editBox = ChatEdit_GetActiveWindow()
+        end
+
         if editBox and editBox:IsVisible() then
             addon.lastActiveChatBox = editBox
 
